@@ -1,69 +1,63 @@
+import mongoose from "mongoose";
 import Conversation from "../models/conversationModel.js";
 import Message from "../models/messageModel.js";
 
+
 export const sendMessage = async (req, res) => {
     try {
-        const { message } = req.body;
-        const { id: receiverId } = req.params;
+        const { conversationId } = req.params;
+        const { text } = req.body;
         const senderId = req.user._id;
 
-        let conversation = await Conversation.findOne({
-            participants: { $all: [senderId, receiverId] },
+        if (!mongoose.Types.ObjectId.isValid(conversationId))
+            return res.status(400).json({ error: "Invalid conversation id" });
+
+        const conv = await Conversation.findOne({
+            _id: conversationId,
+            participants: senderId,
+        });
+        if (!conv) return res.status(403).json({ error: "Not a participant" });
+
+        const msg = await Message.create({ conversationId, senderId, text });
+        // update last message preview
+        await Conversation.findByIdAndUpdate(conversationId, {
+            lastMessage: { text, senderId, createdAt: msg.createdAt },
         });
 
-        if (!conversation) {
-            conversation = await Conversation.create({
-                participants: [senderId, receiverId],
-            });
-        }
+        // emit via socket.io
+        req.io.to(conversationId).emit("newMessage", msg);
 
-        const newMessage = new Message({
-            senderId,
-            receiverId,
-            message,
-        });
-
-        if (newMessage) {
-            conversation.messages.push(newMessage._id);
-        }
-
-        //This way is one to wait of the other
-        // await conversation.save();
-        // await newMessage.save();
-
-        // this will run in parallel
-        await Promise.all([conversation.save(), newMessage.save()]);
-
-        // SOCKET IO FUNCTIONALITY WILL GO HERE
-        //const receiverSocketId = getReceiverSocketId(receiverId);
-        //if (receiverSocketId) {
-        // io.to(<socket_id>).emit() used to send events to specific client
-        //io.to(receiverSocketId).emit("newMessage", newMessage);
-        //}
-
-        res.status(201).json(newMessage);
-    } catch (error) {
-        console.log("Error in sendMessage controller", error.message);
-        res.status(500).json({ error: "Internal server error." })
+        res.status(201).json(msg);
+    } catch (err) {
+        console.error("sendMessage error:", err);
+        res.sendStatus(500);
     }
-}
+};
 
 export const getMessages = async (req, res) => {
     try {
-        const { id: userToChatId } = req.params;
-        const senderId = req.user._id;
+        const { conversationId } = req.params;
+        const { cursor, limit = 30 } = req.query;
+        if (!mongoose.Types.ObjectId.isValid(conversationId))
+            return res.status(400).json({ error: "Invalid conversation id" });
 
-        const conversation = await Conversation.findOne({
-            participants: { $all: [senderId, userToChatId] },
-        }).populate("messages"); // NOT REFERENCE BUT ACTUAL MESSAGES
+        const conv = await Conversation.findOne({
+            _id: conversationId,
+            participants: req.user._id,
+        });
+        if (!conv) return res.status(403).json({ error: "Not a participant" });
 
-        if (!conversation) return res.status(200).json([]);
+        const query = { conversationId };
+        if (cursor) query.createdAt = { $lt: cursor };
 
-        const messages = conversation.messages;
+        const msgs = await Message.find(query)
+            .sort("-createdAt")
+            .limit(+limit)
+            .lean();
 
-        res.status(200).json(messages);
-    } catch (error) {
-        console.log("Error in getMessages controller: ", error.message);
-        res.status(500).json({ error: "Internal server error" });
+        res.json(msgs.reverse());
+    } catch (err) {
+        console.error("getMessages error:", err);
+        res.sendStatus(500);
     }
 };

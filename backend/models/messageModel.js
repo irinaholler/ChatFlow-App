@@ -2,24 +2,19 @@ import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema(
     {
-        senderId: {
+        conversationId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true
+            ref: "Conversation",
+            required: true,
+            index: true,
         },
-        receiverId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true
-        },
-        message: {
-            type: String,
-            required: true
-        }
+        senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        text: { type: String, required: true },
+        seenBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     },
-    { timestemps: true }
+    { timestamps: true }          // ← typo fixed ("timestamps", not "timestemps") :contentReference[oaicite:2]{index=2}&#8203;:contentReference[oaicite:3]{index=3}
 );
 
-const Message = mongoose.model("Message", messageSchema);
+messageSchema.index({ conversationId: 1, createdAt: -1 });
 
-export default Message;
+export default mongoose.model("Message", messageSchema);

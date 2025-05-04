@@ -4,11 +4,17 @@ export const getUsersForSidebar = async (req, res) => {
     try {
         const loggedInUserId = req.user._id;
 
-        const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password"); //This make the logged user not to be visible on the sidebar
+        // Only pull the fields you actually need, and use lean() for a plain JS object
+        const users = await User.find(
+            { _id: { $ne: loggedInUserId } },
+            "fullname username profilePic"
+        )
+            .sort("fullname")   // optional: alphabetical list
+            .lean();
 
-        res.status(200).json(filteredUsers);
+        res.status(200).json(users);
     } catch (error) {
-        console.error("Error in getUsersForSidebar: ", error.message);
+        console.error("Error in getUsersForSidebar:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };

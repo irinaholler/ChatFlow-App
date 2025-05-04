@@ -1,24 +1,22 @@
 import mongoose from "mongoose";
 
-const conversationSchema = new mongoose.Schema(
+const conversationSchema = new mongoose.Schema({
+    participants: [
+        { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
+    ],
+    // keep this array if you want to push message IDs here:
+    messages: [
+        { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: [] }
+    ]
+}, { timestamps: true });
+
+// enforce that combination of two users is unique:
+conversationSchema.index(
+    { participants: 1 },
     {
-        participants: [
-            {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: "User",
-            },
-        ],
-        messages: [
-            {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: "Message",
-                default: [],
-            },
-        ],
-    },
-    { timestamps: true }
+        unique: true,
+        partialFilterExpression: { participants: { $size: 2 } }
+    }
 );
 
-const Conversation = mongoose.model("Conversation", conversationSchema);
-
-export default Conversation;
+export default mongoose.model("Conversation", conversationSchema);
